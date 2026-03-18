@@ -9,6 +9,9 @@
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
+#ifdef PLL
+struct proclist proclist;
+#endif
 
 struct proc *initproc;
 
@@ -26,6 +29,20 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+struct proc*
+proc_first(void)
+{
+  return &proc[0];
+}
+
+struct proc*
+proc_next(struct proc* p)
+{
+  if(p >= &proc[NPROC-1])
+    return 0;
+  return p + 1;
+}
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -34,11 +51,11 @@ proc_mapstacks(pagetable_t kpgtbl)
 {
   struct proc *p;
   
-  for(p = proc; p < &proc[NPROC]; p++) {
+  for(p = proc_first(); p != 0; p = proc_next(p)) {
     char *pa = kalloc();
     if(pa == 0)
       panic("kalloc");
-    uint64 va = KSTACK((int) (p - proc));
+    uint64 va = KSTACK((int) (p - proc_first()));
     kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   }
 }
@@ -51,10 +68,10 @@ procinit(void)
   
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
-  for(p = proc; p < &proc[NPROC]; p++) {
+  for(p = proc_first(); p != 0; p = proc_next(p)) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
-      p->kstack = KSTACK((int) (p - proc));
+      p->kstack = KSTACK((int) (p - proc_first()));
   }
 }
 
@@ -111,7 +128,7 @@ allocproc(void)
 {
   struct proc *p;
 
-  for(p = proc; p < &proc[NPROC]; p++) {
+  for(p = proc_first(); p != 0; p = proc_next(p)) {
     acquire(&p->lock);
     if(p->state == UNUSED) {
       goto found;
@@ -312,7 +329,7 @@ reparent(struct proc *p)
 {
   struct proc *pp;
 
-  for(pp = proc; pp < &proc[NPROC]; pp++){
+  for(pp = proc_first(); pp != 0; pp = proc_next(pp)){
     if(pp->parent == p){
       pp->parent = initproc;
       wakeup(initproc);
@@ -379,7 +396,7 @@ kwait(uint64 addr)
   for(;;){
     // Scan through table looking for exited children.
     havekids = 0;
-    for(pp = proc; pp < &proc[NPROC]; pp++){
+    for(pp = proc_first(); pp != 0; pp = proc_next(pp)){
       if(pp->parent == p){
         // make sure the child isn't still in exit() or swtch().
         acquire(&pp->lock);
@@ -438,7 +455,7 @@ scheduler(void)
     intr_off();
 
     int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
+    for(p = proc_first(); p != 0; p = proc_next(p)) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
@@ -575,7 +592,7 @@ wakeup(void *chan)
 {
   struct proc *p;
 
-  for(p = proc; p < &proc[NPROC]; p++) {
+  for(p = proc_first(); p != 0; p = proc_next(p)) {
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
@@ -594,7 +611,7 @@ kkill(int pid)
 {
   struct proc *p;
 
-  for(p = proc; p < &proc[NPROC]; p++){
+  for(p = proc_first(); p != 0; p = proc_next(p)){
     acquire(&p->lock);
     if(p->pid == pid){
       p->killed = 1;
@@ -677,7 +694,7 @@ procdump(void)
   char *state;
 
   printf("\n");
-  for(p = proc; p < &proc[NPROC]; p++){
+  for(p = proc_first(); p != 0; p = proc_next(p)){
     if(p->state == UNUSED)
       continue;
     if(p->state >= 0 && p->state < NELEM(states) && states[p->state])

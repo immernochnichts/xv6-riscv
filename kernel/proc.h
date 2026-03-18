@@ -105,3 +105,18 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 };
+
+#ifdef PLL
+/*
+  1. kstack must now be set at proc creation
+  2. kernel's vm can't have known beforehand mapping of kernel stacks
+*/
+struct proclist {
+  struct spinlock lock;
+
+  struct proc proc;
+
+  int len;                // lock must be held to r/w len
+  struct proclist* next;  // to alter the list
+};
+#endif
