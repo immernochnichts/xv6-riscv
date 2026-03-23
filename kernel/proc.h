@@ -1,3 +1,5 @@
+#define PLL
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -104,6 +106,10 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  #ifdef PLL
+  struct proc* next;
+  #endif
 };
 
 #ifdef PLL
@@ -114,9 +120,7 @@ struct proc {
 struct proclist {
   struct spinlock lock;
 
-  struct proc proc;
-
-  int len;                // lock must be held to r/w len
-  struct proclist* next;  // to alter the list
+  int len;            // lock must be held to r/w len
+  struct proc* head;  // to alter the list
 };
 #endif

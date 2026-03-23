@@ -32,15 +32,27 @@ struct spinlock wait_lock;
 struct proc*
 proc_first(void)
 {
+  #ifndef PLL
   return &proc[0];
+  #endif
+
+  #ifdef PLL
+  return proclist.head;
+  #endif
 }
 
 struct proc*
 proc_next(struct proc* p)
 {
+  #ifndef PLL
   if(p >= &proc[NPROC-1])
     return 0;
   return p + 1;
+  #endif
+
+  #ifdef PLL
+  return p->next;
+  #endif
 }
 
 // Allocate a page for each process's kernel stack.
@@ -50,7 +62,9 @@ void
 proc_mapstacks(pagetable_t kpgtbl)
 {
   struct proc *p;
-  
+  #ifdef PLL
+  proclistinit();
+  #endif
   for(p = proc_first(); p != 0; p = proc_next(p)) {
     char *pa = kalloc();
     if(pa == 0)
@@ -59,6 +73,20 @@ proc_mapstacks(pagetable_t kpgtbl)
     kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   }
 }
+
+#ifdef PLL
+// make proclist go through the static array
+void
+proclistinit(void)
+{
+  proclist.len = NPROC;
+  proclist.head = &proc[0];
+  for (int i = 0; i < NPROC-1; i++) {
+    proc[i].next = &proc[i+1];
+  }
+  proc[NPROC-1].next = 0;
+}
+#endif
 
 // initialize the proc table.
 void
