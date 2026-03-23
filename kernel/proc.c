@@ -11,6 +11,9 @@ struct cpu cpus[NCPU];
 struct proc proc[NPROC];
 #ifdef PLL
 struct proclist proclist;
+
+// get kernel pagetable from vm.c
+extern pagetable_t kernel_pagetable;
 #endif
 
 struct proc *initproc;
@@ -75,6 +78,35 @@ proc_mapstacks(pagetable_t kpgtbl)
 }
 
 #ifdef PLL
+void
+proc_mapkstack(struct proc* p)
+{
+  uint64 va;
+  int i = 0;
+  // find first available page starting from the top of kernel VAS
+  while ( ismapped(kernel_pagetable, va = KSTACK(i++)) )
+    ;
+  
+  char *pa = kalloc();
+  if(pa == 0)
+      panic("kalloc");
+  
+  kvmmap(kernel_pagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
+}
+#endif
+
+#ifdef PLL
+void
+proc_unmapkstack(struct proc* p)
+{
+  memset((void*)p->kstack, 0, PGSIZE);
+  uvmunmap(kernel_pagetable, p->kstack, 1, 1);
+  p->kstack = 0;
+}
+#endif
+
+#ifdef PLL
 // make proclist go through the static array
 void
 proclistinit(void)
@@ -99,7 +131,13 @@ procinit(void)
   for(p = proc_first(); p != 0; p = proc_next(p)) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
+      #ifndef PLL
       p->kstack = KSTACK((int) (p - proc_first()));
+      #endif
+
+      #ifdef PLL
+      proc_mapkstack(p);
+      #endif
   }
 }
 
