@@ -1,4 +1,4 @@
-#define PLL
+//#define PLL
 
 // Saved registers for kernel context switches.
 struct context {

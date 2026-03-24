@@ -140,6 +140,9 @@ procinit(void)
   for(p = proc_first(); p != 0; p = proc_next(p)) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
+      #ifndef PLL
+      p->kstack = KSTACK((int) (p - proc_first()));
+      #endif
   }
 }
 
