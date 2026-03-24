@@ -49,7 +49,7 @@ kvmmake(void)
   printf("kvmmap %lx to %lx size %ld\n", TRAMPOLINE, (uint64)trampoline, (uint64)PGSIZE);
 
   // allocate and map a kernel stack for each process.
-  proc_mapstacks(kpgtbl);
+  proc_mapstacks(kpgtbl); // uncomment this to make everything work
   
   return kpgtbl;
 }

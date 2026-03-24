@@ -1,4 +1,4 @@
-//#define PLL
+#define PLL
 
 // Saved registers for kernel context switches.
 struct context {
@@ -124,4 +124,7 @@ struct proclist {
   int len;            // lock must be held to r/w len
   struct proc* head;  // to alter the list
 };
+
+static struct proc* _allocproc(void);
+static void _freeproc(struct proc *p);
 #endif

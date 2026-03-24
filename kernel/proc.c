@@ -133,16 +133,18 @@ proclistinit(void)
 void
 procinit(void)
 {
-  struct proc *p;
-  
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+
+  #ifdef PLL
+  proclistinit();
+  #endif
+  struct proc *p;
+
   for(p = proc_first(); p != 0; p = proc_next(p)) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
-      #ifndef PLL
       p->kstack = KSTACK((int) (p - proc_first()));
-      #endif
   }
 }
 
@@ -237,6 +239,58 @@ found:
   return p;
 }
 
+#ifdef PLL
+static struct proc*
+_allocproc(void)
+{
+  struct proc *p = (struct proc*)kalloc();
+  proc_mapkstack(kernel_pagetable, p);
+
+  if (p == 0) {
+    return 0;
+  }
+
+  acquire(&proclist.lock);
+  if (proclist.head == 0) {
+    proclist.head = p;
+    p->next = 0;
+    p->prev = 0;
+  } else {
+    p->next = proclist.head;
+    p->prev = 0;
+    proclist.head = p;
+  }
+  release(&proclist.lock);
+
+  acquire(&p->lock);
+  p->pid = allocpid();
+  p->state = USED;
+
+  // Allocate a trapframe page.
+  if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  // An empty user page table.
+  p->pagetable = proc_pagetable(p);
+  if(p->pagetable == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  // Set up new context to start executing at forkret,
+  // which returns to user space.
+  memset(&p->context, 0, sizeof(p->context));
+  p->context.ra = (uint64)forkret;
+  p->context.sp = p->kstack + PGSIZE;
+
+  return p;
+}
+#endif
+
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
@@ -258,6 +312,21 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
 }
+
+#ifdef PLL
+static void
+_freeproc(struct proc *p)
+{
+  if(p->trapframe)
+    kfree((void*)p->trapframe);
+  if(p->pagetable)
+    proc_freepagetable(p->pagetable, p->sz);
+  p->prev->next = p->next;
+  p->next->prev = p->prev;
+  proc_unmapkstack(p);
+  kfree((void*)p);
+}
+#endif
 
 // Create a user page table for a given process, with no user memory,
 // but with trampoline and trapframe pages.
