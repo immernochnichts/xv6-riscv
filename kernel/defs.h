@@ -84,6 +84,7 @@ int             kfork(void);
 int             growproc(int);
 void            proc_mapstacks(pagetable_t);
 void            proclistinit(void);
+void            proc_mapkstack(pagetable_t, struct proc*);
 pagetable_t     proc_pagetable(struct proc *);
 void            proc_freepagetable(pagetable_t, uint64);
 int             kkill(int);

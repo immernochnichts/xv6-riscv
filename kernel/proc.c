@@ -69,29 +69,37 @@ proc_mapstacks(pagetable_t kpgtbl)
   proclistinit();
   #endif
   for(p = proc_first(); p != 0; p = proc_next(p)) {
+    #ifndef PLL
     char *pa = kalloc();
     if(pa == 0)
       panic("kalloc");
     uint64 va = KSTACK((int) (p - proc_first()));
+    printf("ismapped: %lx %d kstack index %d\t", va, ismapped(kpgtbl, va), (int) (p - proc_first()));
     kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+    printf("proc_mapstacks: map kstack for proc %ld to va %lx\n", (uint64)(p - proc_first()), va);
+    #endif
+
+    #ifdef PLL
+    proc_mapkstack(kpgtbl, p);
+    #endif
   }
 }
 
 #ifdef PLL
 void
-proc_mapkstack(struct proc* p)
+proc_mapkstack(pagetable_t kpgtbl, struct proc* p)
 {
   uint64 va;
   int i = 0;
   // find first available page starting from the top of kernel VAS
-  while ( ismapped(kernel_pagetable, va = KSTACK(i++)) )
-    ;
+  while ( ismapped(kpgtbl, va = KSTACK(i++)) )
+   ;
   
   char *pa = kalloc();
   if(pa == 0)
       panic("kalloc");
   
-  kvmmap(kernel_pagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   p->kstack = va;
 }
 #endif
@@ -100,7 +108,6 @@ proc_mapkstack(struct proc* p)
 void
 proc_unmapkstack(struct proc* p)
 {
-  memset((void*)p->kstack, 0, PGSIZE);
   uvmunmap(kernel_pagetable, p->kstack, 1, 1);
   p->kstack = 0;
 }
@@ -115,8 +122,10 @@ proclistinit(void)
   proclist.head = &proc[0];
   for (int i = 0; i < NPROC-1; i++) {
     proc[i].next = &proc[i+1];
+    proc[i+1].prev = &proc[i];
   }
   proc[NPROC-1].next = 0;
+  proc[0].prev = 0;
 }
 #endif
 
@@ -131,13 +140,6 @@ procinit(void)
   for(p = proc_first(); p != 0; p = proc_next(p)) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
-      #ifndef PLL
-      p->kstack = KSTACK((int) (p - proc_first()));
-      #endif
-
-      #ifdef PLL
-      proc_mapkstack(p);
-      #endif
   }
 }
 

@@ -109,6 +109,7 @@ struct proc {
 
   #ifdef PLL
   struct proc* next;
+  struct proc* prev;
   #endif
 };
 
