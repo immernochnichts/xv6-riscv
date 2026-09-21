@@ -166,6 +166,11 @@ consoleintr(int c)
       consputc(BACKSPACE);
     }
     break;
+  case C('T'):
+    uartputc_sync_x('H', 1);
+    uartputc_sync_x('i', 1);
+    uartputc_sync_x('\n', 1);
+    break;
   default:
     if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {
       c = (c == '\r') ? '\n' : c;

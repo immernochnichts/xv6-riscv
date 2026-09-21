@@ -14,10 +14,11 @@
 // the UART control registers are memory-mapped
 // at address UART0. this macro returns the
 // address of one of the registers.
-#define Reg(reg) ((volatile unsigned char *)(UART0 + (reg)))
+#define UartId(id) ( (id) == 0 ? (UART0) : (UART1) )
+#define Reg(reg, uart_id) ((volatile unsigned char *)(UartId(uart_id) + (reg)))
 
-#define ReadReg(reg)     (*(Reg(reg)))
-#define WriteReg(reg, v) (*(Reg(reg)) = (v))
+#define ReadReg(reg, uart_id)     (*(Reg(reg, uart_id)))
+#define WriteReg(reg, v, uart_id) (*(Reg(reg, uart_id)) = (v))
 
 // the UART control registers.
 // some have different meanings for read vs write.
@@ -39,60 +40,66 @@
 #define LSR_TX_IDLE     (1 << 5) // THR can accept another character to send
 
 // for sending threads to serialize their writes
-static struct sleeplock tx_lock;
-static int tx_chan; // &tx_chan is the "wait channel"
+static struct sleeplock tx_lock[2];
+static int tx_chan[2]; // &tx_chan is the "wait channel"
 
 extern volatile int panicking; // from printk.c
 extern volatile int panicked;  // from printk.c
 
 void
-uartinit(void)
+uartinit_x(uint8 uart_id)
 {
+  if (uart_id > 1)
+    panic("bad uart id");
+
   // disable interrupts.
-  WriteReg(IER, 0x00);
+  WriteReg(IER, 0x00, uart_id);
 
   // special mode to set baud rate.
-  WriteReg(LCR, LCR_BAUD_LATCH);
+  WriteReg(LCR, LCR_BAUD_LATCH, uart_id);
 
   // LSB for baud rate of 38.4K.
-  WriteReg(0, 0x03);
+  WriteReg(0, 0x03, uart_id);
 
   // MSB for baud rate of 38.4K.
-  WriteReg(1, 0x00);
+  WriteReg(1, 0x00, uart_id);
 
   // leave set-baud mode,
   // and set word length to 8 bits, no parity.
-  WriteReg(LCR, LCR_EIGHT_BITS);
+  WriteReg(LCR, LCR_EIGHT_BITS, uart_id);
 
   // reset and enable FIFOs.
-  WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
+  WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR, uart_id);
 
   // enable transmit and receive interrupts.
-  WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);
+  WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE, uart_id);
 
-  initsleeplock(&tx_lock, "uart");
+  initsleeplock(&tx_lock[uart_id], "uart");
 }
 
 // transmit buf[] to the uart. it blocks if the
 // uart is busy, so it cannot be called from
 // interrupts, only from write() system calls.
 void
-uartwrite(char buf[], int n)
+uartwrite_x(char buf[], int n, uint8 uart_id)
 {
-  acquiresleep(&tx_lock);
+  if (uart_id > 1)
+    panic("bad uart id");
+
+  acquiresleep(&tx_lock[uart_id]);
 
   int i = 0;
   while (i < n) {
-    sleep_prepare(&tx_chan);
-    if (ReadReg(LSR) & LSR_TX_IDLE) {
-      WriteReg(THR, buf[i]);
+    sleep_prepare(&tx_chan[uart_id]);
+    if (ReadReg(LSR, uart_id) & LSR_TX_IDLE) {
+      WriteReg(THR, buf[i], uart_id);
       i += 1;
     } else {
       sleep();
     }
   }
 
-  releasesleep(&tx_lock);
+  releasesleep(&tx_lock[uart_id]);
 }
 
 // write a byte to the uart without using
@@ -100,8 +107,11 @@ uartwrite(char buf[], int n)
 // to echo characters. it spins waiting for the uart's
 // output register to be empty.
 void
-uartputc_sync(int c)
+uartputc_sync_x(int c, uint8 uart_id)
 {
+  if (uart_id > 1)
+    panic("bad uart id");
+
   if (panicking == 0)
     push_off();
 
@@ -111,9 +121,9 @@ uartputc_sync(int c)
   }
 
   // wait for UART to set Transmit Holding Empty in LSR.
-  while ((ReadReg(LSR) & LSR_TX_IDLE) == 0)
+  while ((ReadReg(LSR, uart_id) & LSR_TX_IDLE) == 0)
     ;
-  WriteReg(THR, c);
+  WriteReg(THR, c, uart_id);
 
   if (panicking == 0)
     pop_off();
@@ -122,11 +132,14 @@ uartputc_sync(int c)
 // try to read one input character from the UART.
 // return -1 if none is waiting.
 static int
-uartgetc(void)
+uartgetc_x(uint8 uart_id)
 {
+  if (uart_id > 1)
+    panic("bad uart id");
+
   // is input ready?
-  if (ReadReg(LSR) & LSR_RX_READY) {
-    return ReadReg(RHR);
+  if (ReadReg(LSR, uart_id) & LSR_RX_READY) {
+    return ReadReg(RHR, uart_id);
   } else {
     return -1;
   }
@@ -136,20 +149,50 @@ uartgetc(void)
 // arrived, or the uart is ready for more output, or
 // both. called from devintr().
 void
-uartintr(void)
+uartintr_x(uint8 uart_id)
 {
-  ReadReg(ISR); // acknowledge the interrupt
+  if (uart_id > 1)
+    panic("bad uart id");
 
-  if (ReadReg(LSR) & LSR_TX_IDLE) {
+  ReadReg(ISR, uart_id); // acknowledge the interrupt
+
+  if (ReadReg(LSR, uart_id) & LSR_TX_IDLE) {
     // UART finished transmitting; wake up sending thread.
-    wakeup(&tx_chan);
+    wakeup(&tx_chan[uart_id]);
   }
 
   // read and process incoming characters, if any.
   while (1) {
-    int c = uartgetc();
+    int c = uartgetc_x(uart_id);
     if (c == -1)
       break;
-    consoleintr(c);
+    if (uart_id == 0) // redirect incoming characters to console via uart0
+      consoleintr(c);
   }
+}
+
+// wrappers with old signatures to keep old api working
+void
+uartinit()
+{
+  uartinit_x(0);
+  uartinit_x(1);
+}
+
+void
+uartwrite(char buf[], int n)
+{
+  uartwrite_x(buf, n, 0);
+}
+
+void
+uartputc_sync(int c)
+{
+  uartputc_sync_x(c, 0);
+}
+
+void
+uartintr(void)
+{
+  uartintr_x(0);
 }

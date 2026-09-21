@@ -48,3 +48,7 @@ void printf(const char *, ...) __attribute__((format(printf, 1, 2)));
 // umalloc.c
 void *malloc(uint);
 void free(void *);
+
+// uart utils
+void            uartwrite_x(char [], int, unsigned char uart_id);
+void            uartputc_sync_x(int, unsigned char uart_id);

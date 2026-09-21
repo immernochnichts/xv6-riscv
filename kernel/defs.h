@@ -150,6 +150,10 @@ void            uartinit(void);
 void            uartintr(void);
 void            uartwrite(char [], int);
 void            uartputc_sync(int);
+void            uartinit_x(uint8 uart_id);
+void            uartintr_x(uint8 uart_id);
+void            uartwrite_x(char [], int, uint8 uart_id);
+void            uartputc_sync_x(int, uint8 uart_id);
 
 // vm.c
 void            kvminit(void);

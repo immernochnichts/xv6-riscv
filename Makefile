@@ -6,7 +6,7 @@ OBJS = \
   $K/start.o \
   $K/console.o \
   $K/printk.o \
-  $K/uart.o \
+  $K/uart_extended.o \
   $K/kalloc.o \
   $K/spinlock.o \
   $K/string.o \
@@ -52,7 +52,7 @@ TOOLPREFIX := $(shell if riscv64-unknown-elf-objdump -i 2>&1 | grep 'elf64-big' 
 	echo "***" 1>&2; exit 1; fi)
 endif
 
-QEMU = qemu-system-riscv64
+QEMU = ../qemu/build/qemu-system-riscv64
 MIN_QEMU_VERSION = 7.2
 
 CC = $(TOOLPREFIX)gcc
@@ -150,6 +150,7 @@ UPROGS=\
 	$U/_forphan\
 	$U/_dorphan\
 	$U/_sync\
+	$U/_vmtracetest\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
@@ -174,13 +175,17 @@ ifndef CPUS
 CPUS := 3
 endif
 
+#-machine virt,dumpdtb=virt.dtb
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
-QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 -monitor none
+QEMUOPTS += -serial stdio
+QEMUOPTS += -serial tcp:127.0.0.1:50000,server=on,wait=off # second uart. requires QEMU ver 9.1 and above
 
 qemu: check-qemu-version $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)
+	dtc -I dtb -O dts virt.dtb > virt.dts
 
 .gdbinit: .gdbinit.tmpl-riscv
 	sed "s/:1234/:$(GDBPORT)/" < $^ > $@
