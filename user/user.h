@@ -44,11 +44,8 @@ char *sbrklazy(int);
 // printf.c
 void fprintf(int, const char *, ...) __attribute__((format(printf, 2, 3)));
 void printf(const char *, ...) __attribute__((format(printf, 1, 2)));
+void fprintf(int, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
 // umalloc.c
 void *malloc(uint);
 void free(void *);
-
-// uart utils
-void            uartwrite_x(char [], int, unsigned char uart_id);
-void            uartputc_sync_x(int, unsigned char uart_id);

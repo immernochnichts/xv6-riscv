@@ -23,6 +23,9 @@ void            consoleinit(void);
 void            consoleintr(int);
 void            consputc(int);
 
+// vmtrace.c
+void            vmtraceinit(void);
+
 // exec.c
 int             kexec(char*, char**);
 
