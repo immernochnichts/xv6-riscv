@@ -12,11 +12,17 @@ main(void)
 {
   int fd;
 
-  if ((fd = open("vmtrace", O_RDWR)) < 0) { // create a file-device for UART1
+  if ((fd = open("vmtrace", O_WRONLY)) < 0) { // create a file-device for UART1
     mknod("vmtrace", VMTRACE, 0);
-    fd = open("vmtrace", O_RDWR);
+    fd = open("vmtrace", O_WRONLY);
   }
 
-  printf("fd value: %d\n", fd);
-  fprintf(fd, "%s", "Hello from the xv6 user process!\n");
+  // the logic:
+  // check if there's events to send
+  // if none, go sleep
+  // if there are, acquire the lock on the buf and send them all and go back to sleep
+
+  while (1) {
+    
+  }
 }

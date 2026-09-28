@@ -8,7 +8,13 @@
 #include "riscv.h"
 #include "defs.h"
 #include "proc.h"
+#include "vm_event.h"
+#include "vmtrace.h"
+#include "vmt_ringbuf.h"
 
+static struct vm_event events[128];
+static struct ring_buf vmebuf;
+void* vmebuf_chan;
 
 // override the write() syscall to go here on major device 2
 int
@@ -33,5 +39,76 @@ vmtracewrite(int user_src, uint64 src, int n)
 void
 vmtraceinit(void) // uartinit is called in consoleinit (console.c)
 {
-    devsw[VMTRACE].write = vmtracewrite;
+  devsw[VMTRACE].write = vmtracewrite;
+
+  vmebuf.buf = events;
+  vmebuf.size = 128;
+  vmebuf.head = 0;
+  vmebuf.tail = 0;
+  initlock(&vmebuf.lock, "vmebuf");
+
+  vmebuf_chan = &vmebuf;
+}
+
+int vmtrace_isbufempty()
+{
+  acquire(&vmebuf.lock);
+  int f = ring_buf_is_empty(&vmebuf);
+  release(&vmebuf.lock);
+  return f;
+}
+
+void vmtrace_pushevent(struct vm_event* e)
+{
+  #ifndef VMTRACEENABLE
+  return;
+  #endif
+
+  acquire(&vmebuf.lock);
+  if (ring_buf_is_full(&vmebuf))
+  {
+    printk("vmebuf is full\n");
+    release(&vmebuf.lock);
+    return;
+  }
+
+  ring_buf_putevent(&vmebuf, e);
+  release(&vmebuf.lock);
+}
+
+void vmtrace_alloc(int pid, uint64 start, uint64 end, char region_name[16], char func_name[16])
+{
+  #ifndef VMTRACEENABLE
+  return;
+  #endif
+
+  struct vm_event e;
+  e.type = 0; // VME_ALLOC
+  e.subject_pid = pid;
+  e.range_start = start;
+  e.range_end = end;
+  for (int i = 0; i < 16; i++)
+  {
+    e.region_name[i] = region_name[i];
+    e.subject_func[i] = func_name[i];
+  }
+  vmtrace_pushevent(&e);
+}
+void vmtrace_dealloc(int pid, uint64 start, uint64 end, char region_name[16], char func_name[16])
+{
+  #ifndef VMTRACEENABLE
+  return;
+  #endif
+
+  struct vm_event e;
+  e.type = 1; // VME_DEALLOC
+  e.subject_pid = pid;
+  e.range_start = start;
+  e.range_end = end;
+  for (int i = 0; i < 16; i++)
+  {
+    e.region_name[i] = region_name[i];
+    e.subject_func[i] = func_name[i];
+  }
+  vmtrace_pushevent(&e);
 }

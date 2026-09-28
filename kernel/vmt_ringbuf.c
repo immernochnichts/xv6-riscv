@@ -1,8 +1,12 @@
-#include "ring_buf.h"
+#include "types.h"
+#include "spinlock.h"
+#include "vm_event.h"
+#include "vmt_ringbuf.h"
 
-void ring_buf_putchar(struct ring_buf* b, uint8_t c)
+
+void ring_buf_putevent(struct ring_buf* b, struct vm_event* e)
 {
-    b->buf[b->head] = c;
+    b->buf[b->head] = *e;
     b->head++;
 
     if (b->head == b->size)
@@ -11,9 +15,9 @@ void ring_buf_putchar(struct ring_buf* b, uint8_t c)
     }
 }
 
-uint8_t ring_buf_getchar(struct ring_buf* b)
+struct vm_event ring_buf_getevent(struct ring_buf* b)
 {
-    uint8_t c = b->buf[b->tail];
+    struct vm_event e = b->buf[b->tail];
     b->tail++;
 
     if (b->tail == b->size)
@@ -21,17 +25,18 @@ uint8_t ring_buf_getchar(struct ring_buf* b)
         b->tail = 0;
     }
 
-    return c;
+    return e;
 }
 
-uint8_t ring_buf_is_empty(struct ring_buf* b)
+int ring_buf_is_empty(struct ring_buf* b)
 {
     return b->head == b->tail;
 }
 
-uint8_t ring_buf_is_full(struct ring_buf* b)
+// one slot is reserved, so the actual buffer size is 1 less
+int ring_buf_is_full(struct ring_buf* b)
 {
-    uint8_t next_head = b->head + 1;
+    uint8 next_head = b->head + 1;
 
     if (next_head == b->size)
     {

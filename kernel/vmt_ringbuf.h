@@ -1,22 +1,18 @@
-#ifndef RING_BUF_H
-#define RING_BUF_H
-
 struct ring_buf
 {
-    uint8_t* buf;
-    uint8_t size;
-    uint8_t head;
-    uint8_t tail;
+    struct spinlock lock;
+    struct vm_event* buf;
+    uint8 size;
+    uint8 head;
+    uint8 tail;
 };
 
-void ring_buf_putchar(struct ring_buf* b, uint8_t c);
+void ring_buf_putevent(struct ring_buf* b, struct vm_event* e);
 
-uint8_t ring_buf_getchar(struct ring_buf* b);
+struct vm_event ring_buf_getevent(struct ring_buf* b);
 
 // 1 if empty, 0 if not
-uint8_t ring_buf_is_empty(struct ring_buf* b);
+int ring_buf_is_empty(struct ring_buf* b);
 
 // 1 if full, 0 if not
-uint8_t ring_buf_is_full(struct ring_buf* b);
-
-#endif
+int ring_buf_is_full(struct ring_buf* b);
