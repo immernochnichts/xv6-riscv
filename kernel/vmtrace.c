@@ -58,25 +58,49 @@ int vmtrace_isbufempty()
   return f;
 }
 
-void vmtrace_pushevent(struct vm_event* e)
+// 0 on success, -1 on failure
+int vmtrace_popevent(struct vm_event* e)
 {
   #ifndef VMTRACEENABLE
-  return;
+  return -1;
+  #endif
+
+  acquire(&vmebuf.lock);
+  if (ring_buf_is_empty(&vmebuf))
+  {
+    release(&vmebuf.lock);
+    return -1;
+  }
+
+  ring_buf_getevent(&vmebuf, e);
+  release(&vmebuf.lock);
+  return 0;
+}
+
+// 0 on success, -1 on failure
+int vmtrace_pushevent(struct vm_event* e)
+{
+  #ifndef VMTRACEENABLE
+  return -1;
   #endif
 
   acquire(&vmebuf.lock);
   if (ring_buf_is_full(&vmebuf))
   {
-    printk("vmebuf is full\n");
+    vmebuf.events_lost++;
     release(&vmebuf.lock);
-    return;
+    printk("vmebuf is full\n");
+    return -1;
   }
 
   ring_buf_putevent(&vmebuf, e);
   release(&vmebuf.lock);
+
+  wakeup(vmebuf_chan);
+  return 0;
 }
 
-void vmtrace_alloc(int pid, uint64 start, uint64 end, char region_name[16], char func_name[16])
+void vmtrace_alloc(int pid, uint64 start, uint64 end, const char* region_name, const char* func_name)
 {
   #ifndef VMTRACEENABLE
   return;
@@ -87,14 +111,22 @@ void vmtrace_alloc(int pid, uint64 start, uint64 end, char region_name[16], char
   e.subject_pid = pid;
   e.range_start = start;
   e.range_end = end;
-  for (int i = 0; i < 16; i++)
-  {
+
+  int i = 0;
+  while (i < 16 && region_name[i] != '\0') {
     e.region_name[i] = region_name[i];
-    e.subject_func[i] = func_name[i];
+    i++;
   }
+
+  i = 0;
+  while (i < 16 && func_name[i] != '\0') {
+    e.subject_func[i] = func_name[i];
+    i++;
+  }
+
   vmtrace_pushevent(&e);
 }
-void vmtrace_dealloc(int pid, uint64 start, uint64 end, char region_name[16], char func_name[16])
+void vmtrace_dealloc(int pid, uint64 start, uint64 end, const char* region_name, const char* func_name)
 {
   #ifndef VMTRACEENABLE
   return;
@@ -105,10 +137,18 @@ void vmtrace_dealloc(int pid, uint64 start, uint64 end, char region_name[16], ch
   e.subject_pid = pid;
   e.range_start = start;
   e.range_end = end;
-  for (int i = 0; i < 16; i++)
-  {
+
+  int i = 0;
+  while (i < 16 && region_name[i] != '\0' && i < 16) {
     e.region_name[i] = region_name[i];
-    e.subject_func[i] = func_name[i];
+    i++;
   }
+
+  i = 0;
+  while (i < 16 && func_name[i] != '\0') {
+    e.subject_func[i] = func_name[i];
+    i++;
+  }
+
   vmtrace_pushevent(&e);
 }

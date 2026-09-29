@@ -15,9 +15,9 @@ void ring_buf_putevent(struct ring_buf* b, struct vm_event* e)
     }
 }
 
-struct vm_event ring_buf_getevent(struct ring_buf* b)
+void ring_buf_getevent(struct ring_buf* b, struct vm_event* e)
 {
-    struct vm_event e = b->buf[b->tail];
+    struct vm_event ev = b->buf[b->tail];
     b->tail++;
 
     if (b->tail == b->size)
@@ -25,7 +25,7 @@ struct vm_event ring_buf_getevent(struct ring_buf* b)
         b->tail = 0;
     }
 
-    return e;
+    *e = ev;
 }
 
 int ring_buf_is_empty(struct ring_buf* b)

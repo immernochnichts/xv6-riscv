@@ -6,6 +6,9 @@
 #include "kernel/file.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
+#include "kernel/vm_event.h"
+
+struct vm_event buf[16];
 
 int
 main(void)
@@ -23,6 +26,8 @@ main(void)
   // if there are, acquire the lock on the buf and send them all and go back to sleep
 
   while (1) {
-    
+    int i = vmtread(buf, 16);
+
+    write(fd, buf, sizeof(struct vm_event) * i);
   }
 }

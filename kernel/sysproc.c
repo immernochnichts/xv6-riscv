@@ -6,6 +6,8 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "vm_event.h"
+#include "vmtrace.h"
 
 uint64
 sys_exit(void)
@@ -109,4 +111,35 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+// vmtrace.c
+extern void* vmebuf_chan;
+
+// sleep until the buffer is not empty
+// when awaken sends up to n events
+uint64
+sys_vmtread(void)
+{
+  struct proc* p = myproc();
+  uint64 uaddr;
+  int event_count;
+
+  argaddr(0, &uaddr);
+  argint(1, &event_count);
+
+  while (vmtrace_isbufempty()) {
+    sleep_prepare(vmebuf_chan);
+    sleep();
+  }
+
+  struct vm_event e;
+  int i = 0;
+  while (i < event_count &&
+    (vmtrace_popevent(&e) == 0) &&
+    (copyout(p->pagetable, p->sz, uaddr + i * sizeof(struct vm_event), (char*) &e, sizeof(struct vm_event)) != -1)) {
+    i++;
+  }
+
+  return i;
 }

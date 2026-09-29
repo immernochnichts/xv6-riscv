@@ -12,7 +12,6 @@ main()
 {
   if (cpuid() == 0) {
     consoleinit();
-    vmtraceinit();
     printkinit();
     printk("\n");
     printk("xv6 kernel is booting\n");
@@ -30,6 +29,9 @@ main()
     fileinit();         // file table
     virtio_disk_init(); // emulated hard disk
     userinit();         // first user process
+    #ifdef VMTRACEENABLE
+    vmtraceinit();
+    #endif
 
     __atomic_store_n(&started, 1, __ATOMIC_RELEASE);
   } else {
