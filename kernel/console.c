@@ -170,7 +170,7 @@ consoleintr(int c)
     }
     break;
   case C('T'):
-    vmtrace_alloc(0x11111111, 0x2222222222222222ULL, 0x3333333333333333, "DEBUG\0", "VMTRACEINIT\0");
+    vmtrace_alloc(0x11111111, 0x2222222222222222ULL, 0x3333333333333333ULL, "DEBUG\0", "VMTRACEINIT\0");
     break;
   default:
     if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {

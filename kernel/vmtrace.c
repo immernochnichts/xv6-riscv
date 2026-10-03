@@ -12,7 +12,9 @@
 #include "vmtrace.h"
 #include "vmt_ringbuf.h"
 
-static struct vm_event events[128];
+extern int kexec(char *path, char **argv);
+
+static struct vm_event events[VMTBUFSZ];
 static struct ring_buf vmebuf;
 void* vmebuf_chan;
 
@@ -42,7 +44,7 @@ vmtraceinit(void) // uartinit is called in consoleinit (console.c)
   devsw[VMTRACE].write = vmtracewrite;
 
   vmebuf.buf = events;
-  vmebuf.size = 128;
+  vmebuf.size = VMTBUFSZ;
   vmebuf.head = 0;
   vmebuf.tail = 0;
   initlock(&vmebuf.lock, "vmebuf");
@@ -88,8 +90,9 @@ int vmtrace_pushevent(struct vm_event* e)
   if (ring_buf_is_full(&vmebuf))
   {
     vmebuf.events_lost++;
+    int t = vmebuf.events_lost;
     release(&vmebuf.lock);
-    printk("vmebuf is full\n");
+    printk("vmebuf full; events lost: %d\n", t);
     return -1;
   }
 

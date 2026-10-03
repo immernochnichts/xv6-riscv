@@ -10,11 +10,13 @@
 #include "kernel/fcntl.h"
 
 char *argv[] = {"sh", 0};
+char *argv_vmt [] = { "vmtracetest" };
+
 
 int
 main(void)
 {
-  int pid, wpid;
+  int pid_sh, pid_vmtrace, wpid;
 
   if (open("console", O_RDWR) < 0) {
     mknod("console", CONSOLE, 0);
@@ -25,14 +27,26 @@ main(void)
 
   for (;;) {
     printf("init: starting sh\n");
-    pid = fork();
-    if (pid < 0) {
+    pid_sh = fork();
+    if (pid_sh < 0) {
       printf("init: fork failed\n");
       exit(1);
     }
-    if (pid == 0) {
+    if (pid_sh == 0) {
       exec("sh", argv);
       printf("init: exec sh failed\n");
+      exit(1);
+    }
+
+    printf("init: starting vmtrace\n");
+    pid_vmtrace = fork();
+    if (pid_vmtrace < 0) {
+      printf("init: fork failed\n");
+      exit(1);
+    }
+    if (pid_vmtrace == 0) {
+      exec("vmtracetest", argv_vmt);
+      printf("init: exec vmtracetest failed\n");
       exit(1);
     }
 
@@ -40,7 +54,7 @@ main(void)
       // this call to wait() returns if the shell exits,
       // or if a parentless process exits.
       wpid = wait((int *)0);
-      if (wpid == pid) {
+      if (wpid == pid_sh) {
         // the shell exited; restart it.
         break;
       } else if (wpid < 0) {
