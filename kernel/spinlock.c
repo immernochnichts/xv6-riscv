@@ -22,8 +22,9 @@ void
 acquire(struct spinlock *lk)
 {
   push_off(); // disable interrupts to avoid deadlock.
-  if (holding(lk))
+  if (holding(lk)) {
     panic("acquire");
+  }
 
   // On RISC-V, __atomic_exchange_n turns into an atomic swap:
   //   a5 = 1

@@ -8,6 +8,10 @@
 #include "proc.h"
 #include "fs.h"
 
+#ifdef VMTRACEENABLE
+#include "vmtrace.h"
+#endif
+
 /*
  * the kernel's page table.
  */
@@ -150,6 +154,43 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   uint64 a, last;
   pte_t *pte;
 
+  #ifdef VMTRACEENABLE
+  struct proc *p = myproc();
+  int cause_pushed = 0;
+  if (p)
+    cause_pushed = vmtrace_pushcause(&p->current_event, MAPPAGES);
+
+  if (p && !p->current_event.valid) {
+    p->current_event.timestamp = r_time();
+    p->current_event.range_start = va;
+    p->current_event.range_end = va + size * PGSIZE;
+    p->current_event.valid = 1;
+  } else if (p && p->current_event.valid) {
+    if (p->current_event.range_end == va) { // merge
+      p->current_event.range_end = va + size * PGSIZE;
+    } else { // merge impossible
+      //vmtrace_printeventk(&p->current_event);
+
+      // the mappages can be called with a lock held
+      // on some process (allocproc -> proc_pagetable -> mappages). the pushevent function calls
+      // wakeup, which acquires the lock on every process.
+      // because of this, a double acquire happens and
+      // the kernel crashes. to prevent this, the wakeup is disabled
+      // for certain event causes (namely, FORK).
+      if (vmtrace_causestackcontains(&p->current_event, FORK)) { // stop merging and send the event
+        vmtrace_pushevent(&p->current_event, 0);
+      } else {
+        vmtrace_pushevent(&p->current_event, 1);
+      } 
+
+      p->current_event.timestamp = r_time();
+      p->current_event.range_start = va;
+      p->current_event.range_end = va + size * PGSIZE;
+      p->current_event.valid = 1;
+    }
+  }
+  #endif
+
   if ((va % PGSIZE) != 0)
     panic("mappages: va not aligned");
 
@@ -162,8 +203,16 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   a = va;
   last = va + size - PGSIZE;
   for (;;) {
-    if ((pte = walk(pagetable, a, 1)) == 0)
+    if ((pte = walk(pagetable, a, 1)) == 0) {
+      
+      #ifdef VMTRACEENABLE
+      p->current_event.error = 1;
+      if (cause_pushed)
+        vmtrace_popcause(&p->current_event);
+      #endif
+
       return -1;
+    }
     if (*pte & PTE_V)
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
@@ -172,6 +221,11 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     a += PGSIZE;
     pa += PGSIZE;
   }
+
+  #ifdef VMTRACEENABLE
+  if (cause_pushed)
+    vmtrace_popcause(&p->current_event);
+  #endif
   return 0;
 }
 

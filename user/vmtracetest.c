@@ -6,7 +6,6 @@
 #include "kernel/file.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
-#include "kernel/vm_event.h"
 
 struct vm_event buf[16];
 

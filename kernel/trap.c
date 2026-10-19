@@ -141,6 +141,14 @@ kerneltrap()
   uint64 sstatus = r_sstatus();
   uint64 scause = r_scause();
 
+  #ifdef VMTRACEENABLE
+  struct proc *p = myproc();
+  struct vm_event interrupted_current_event = {0};
+  if (p) {
+    interrupted_current_event = p->current_event;
+  }
+  #endif
+
   if ((sstatus & SSTATUS_SPP) == 0)
     panic("kerneltrap: not from supervisor mode");
   if (intr_get() != 0)
@@ -162,6 +170,12 @@ kerneltrap()
   // so restore trap registers for use by kernelvec.S's sepc instruction.
   w_sepc(sepc);
   w_sstatus(sstatus);
+  
+  #ifdef VMTRACEENABLE
+  if (p) { // restore vmtrace related proc fields
+    p->current_event = interrupted_current_event;
+  }
+  #endif
 }
 
 void

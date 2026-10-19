@@ -6,7 +6,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
-#include "vm_event.h"
 #include "vmtrace.h"
 
 uint64

@@ -1,15 +1,27 @@
-enum vm_event_type
+// cause stack relies on cause_sp 255 to be reserved for empty state
+#define VM_EVENT_CAUSE_STACK_SIZE 4
+
+enum vm_event_cause
 {
-    VME_ALLOC,
-    VME_DEALLOC
+    NONE, // none if the cause is not set yet
+    FORK,
+    EXEC,
+    MALLOC,
+    SBRK,
+    PROCINIT,
+    ALLOCPROC,
+    PROCPGTBL,
+    MAPPAGES
 };
 
 struct vm_event
 {
-    uint32 subject_pid;
-    uint32 type;
+    uint64 timestamp;
     uint64 range_start;
     uint64 range_end;
-    char region_name[16];
-    char subject_func[16];
+    int pid; // highest order bit in pid is indicating whether it's allocation (0) or deallocation (1)
+    uint8 cause_stack[VM_EVENT_CAUSE_STACK_SIZE]; // (cause_number(s))
+    uint8 cause_sp;
+    uint8 valid;
+    uint8 error; // has error occured during a 'vm transaction'
 };

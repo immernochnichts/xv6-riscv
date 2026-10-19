@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "vmtrace.h"
 
 struct cpu cpus[NCPU];
 
@@ -55,6 +56,11 @@ procinit(void)
     initlock(&p->lock, "proc");
     p->state = UNUSED;
     p->kstack = KSTACK((int)(p - proc));
+
+    #ifdef VMTRACEENABLE
+    p->current_event.valid = 0;
+    p->current_event.cause_sp = 0;
+    #endif
   }
 }
 
@@ -132,11 +138,17 @@ found:
     return 0;
   }
 
+  // #ifdef VMTRACEENABLE
+  // vmtrace_pushcause(&p->current_event, ALLOCPROC);
+  // #endif
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if (p->pagetable == 0) {
     freeproc(p);
     release(&p->lock);
+    // #ifdef VMTRACEENABLE
+    // vmtrace_popcause(&p->current_event);
+    // #endif
     return 0;
   }
 
@@ -175,12 +187,25 @@ freeproc(struct proc *p)
 pagetable_t
 proc_pagetable(struct proc *p)
 {
+  #ifdef VMTRACEENABLE
+  struct proc *mp = myproc();
+  int cause_pushed = 0;
+  if (mp)
+    cause_pushed = vmtrace_pushcause(&mp->current_event, PROCPGTBL);
+  #endif
+
   pagetable_t pagetable;
 
   // An empty page table.
   pagetable = uvmcreate();
-  if (pagetable == 0)
+  if (pagetable == 0) {
+    #ifdef VMTRACEENABLE
+    if (cause_pushed)
+      vmtrace_popcause(&mp->current_event);
+    mp->current_event.error = 1;
+    #endif
     return 0;
+  }
 
   // map the trampoline code (for system call return)
   // at the highest user virtual address.
@@ -189,6 +214,11 @@ proc_pagetable(struct proc *p)
   if (mappages(pagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline,
                PTE_R | PTE_X) < 0) {
     uvmfree(pagetable, 0);
+    #ifdef VMTRACEENABLE
+    if (cause_pushed)
+      vmtrace_popcause(&p->current_event);
+    p->current_event.error = 1;
+    #endif
     return 0;
   }
 
@@ -198,9 +228,18 @@ proc_pagetable(struct proc *p)
                PTE_R | PTE_W) < 0) {
     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
     uvmfree(pagetable, 0);
+    #ifdef VMTRACEENABLE
+    if (cause_pushed)
+      vmtrace_popcause(&p->current_event);
+    p->current_event.error = 1;
+    #endif
     return 0;
   }
 
+  #ifdef VMTRACEENABLE
+  if (cause_pushed)
+    vmtrace_popcause(&p->current_event);
+  #endif
   return pagetable;
 }
 
@@ -262,15 +301,46 @@ kfork(void)
   struct proc *np;
   struct proc *p = myproc();
 
+  #ifdef VMTRACEENABLE
+  int cause_pushed = 0;
+  if (!p->current_event.valid) {
+    p->current_event.timestamp = r_time();
+    cause_pushed = vmtrace_pushcause(&p->current_event, FORK);
+    p->current_event.error = 0;
+    p->current_event.valid = 1;
+  } else if (p->current_event.valid) {
+    cause_pushed = vmtrace_pushcause(&p->current_event, FORK);
+  }
+  #endif
+
   // Allocate process.
+  //printk("kfork: before allocproc\n");
   if ((np = allocproc()) == 0) {
+    
+    #ifdef VMTRACEENABLE
+    p->current_event.error = 1;
+    if (cause_pushed)
+      vmtrace_popcause(&p->current_event);
+    #endif
+
     return -1;
   }
+
+  #ifdef VMTRACEENABLE
+  p->current_event.pid = np->pid; // sending events on behalf of the child process
+  #endif
 
   // Copy user memory from parent to child.
   if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
     freeproc(np);
     release(&np->lock);
+
+    #ifdef VMTRACEENABLE
+    p->current_event.error = 1;
+    if (cause_pushed)
+      vmtrace_popcause(&p->current_event);
+    #endif
+
     return -1;
   }
   np->sz = p->sz;
@@ -301,6 +371,10 @@ kfork(void)
   np->state = RUNNABLE;
   release(&np->lock);
 
+  #ifdef VMTRACEENABLE
+  if (cause_pushed)
+    vmtrace_popcause(&p->current_event);
+  #endif
   return pid;
 }
 

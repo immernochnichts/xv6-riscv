@@ -1,6 +1,5 @@
 #include "types.h"
 #include "spinlock.h"
-#include "vm_event.h"
 #include "vmt_ringbuf.h"
 
 
