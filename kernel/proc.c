@@ -115,7 +115,7 @@ allocpid()
 static struct proc *
 allocproc(void)
 {
-  struct proc *p;
+  struct proc *p, *mp;
 
   for (p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
@@ -129,6 +129,15 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+
+  #ifdef VMTRACEENABLE
+  if ((mp = myproc()) != 0) {
+    if (vmtrace_causestackcontains(&mp->current_event, FORK)) { // if coming from fork, set the current event's pid to child's pid to create vm events on behalf of child
+      mp->current_event.pid = p->pid;
+    }
+  }
+  #endif
+  
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -314,9 +323,8 @@ kfork(void)
   #endif
 
   // Allocate process.
-  //printk("kfork: before allocproc\n");
   if ((np = allocproc()) == 0) {
-    
+
     #ifdef VMTRACEENABLE
     p->current_event.error = 1;
     if (cause_pushed)
@@ -325,10 +333,6 @@ kfork(void)
 
     return -1;
   }
-
-  #ifdef VMTRACEENABLE
-  p->current_event.pid = np->pid; // sending events on behalf of the child process
-  #endif
 
   // Copy user memory from parent to child.
   if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {

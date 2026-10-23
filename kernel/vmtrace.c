@@ -159,7 +159,8 @@ int vmtrace_pushevent(struct vm_event* e, int wkup)
     return -1;
   }
 
-  ring_buf_putevent(&vmebuf, e); git commit -am "Extended the vm_event struct. The cause of a vm_event is stored as stack which helps to trace the functions called under the hood to (de)allocate the virtual memory. Currently, many events are lost on startup and only parts of fork syscall vm routines are traced. All usertests pass."
+  ring_buf_putevent(&vmebuf, e);
+  release(&vmebuf.lock); // accidentally deleted this line so kernel crashed
 
   if (wkup)
     wakeup(vmebuf_chan);

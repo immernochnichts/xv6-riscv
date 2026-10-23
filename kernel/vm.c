@@ -163,13 +163,16 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   if (p && !p->current_event.valid) {
     p->current_event.timestamp = r_time();
     p->current_event.range_start = va;
-    p->current_event.range_end = va + size * PGSIZE;
+    p->current_event.range_end = va + size;
     p->current_event.valid = 1;
   } else if (p && p->current_event.valid) {
+    //printk("CE: (%lx, %lx) NewE: (%lx, %lx)\n", p->current_event.range_start, p->current_event.range_end, va, va + size);
     if (p->current_event.range_end == va) { // merge
-      p->current_event.range_end = va + size * PGSIZE;
+      printk("merging events: (%lx, %lx) + (%lx, %lx) -> (%lx, %lx)\n", p->current_event.range_start, p->current_event.range_end, va, va+size, p->current_event.range_start, va+size);
+      p->current_event.range_end = va + size;
     } else { // merge impossible
-      //vmtrace_printeventk(&p->current_event);
+      printk("sending event:");
+      vmtrace_printeventk(&p->current_event);
 
       // the mappages can be called with a lock held
       // on some process (allocproc -> proc_pagetable -> mappages). the pushevent function calls
@@ -185,7 +188,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
       p->current_event.timestamp = r_time();
       p->current_event.range_start = va;
-      p->current_event.range_end = va + size * PGSIZE;
+      p->current_event.range_end = va + size;
       p->current_event.valid = 1;
     }
   }

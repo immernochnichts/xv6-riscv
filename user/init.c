@@ -63,10 +63,10 @@ main(void)
   dup(0); // stderr
 
   for (;;) {
-    pid_sh = start_sh();
     #ifdef VMTRACEENABLE
     int pid_vmtrace = start_vmtrace();
     #endif
+    pid_sh = start_sh();
 
     for (;;) {
       // this call to wait() returns if the shell exits,
